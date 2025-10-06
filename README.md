@@ -112,6 +112,4 @@ python-Chat-room/
 ***
 
 Happy chatting under the stars! 🌟✨💫
-```
 
-You can copy this markdown content into a new `README.md` file and push it to your GitHub repo.
