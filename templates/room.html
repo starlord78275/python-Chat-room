@@ -1,0 +1,284 @@
+{% extends 'base.html' %} 
+{% block content %}
+<div class="message-box">
+  <div class="room-header">
+    <h2>🌟 Chat Room: {{code}} 🌟</h2>
+  </div>
+  <div class="messages" id="messages" ondrop="dropHandler(event);" ondragover="dragOverHandler(event);" ondragenter="dragEnterHandler(event);" ondragleave="dragLeaveHandler(event);"></div>
+  <div class="input-container">
+    <div class="message-input-wrapper">
+      <input
+        type="text"
+        placeholder="Type message... or drag & drop files here"
+        name="message"
+        id="message"
+        onkeypress="handleEnterKey(event)"
+        autocomplete="off"
+      />
+      <button type="button" id="attach-btn" title="Attach File" onclick="document.getElementById('file-input').click()">
+        📎
+      </button>
+    </div>
+    <button type="button" name="send" id="send-btn" onClick="sendMessage()">
+      <span>Send</span>
+      <span class="send-icon">🚀</span>
+    </button>
+    <!-- Hidden file input -->
+    <input type="file" id="file-input" style="display: none;" onchange="handleFileSelect(this.files)" accept="image/*,audio/*,video/*,application/pdf,.doc,.docx,.txt,.ppt,.pptx,.xls,.xlsx,.zip,.rar" />
+  </div>
+  <div id="upload-status" class="upload-status"></div>
+  <div class="drop-zone" id="drop-zone">
+    <div class="drop-content">
+      <div class="drop-icon">📁</div>
+      <div class="drop-text">Drop files here to share</div>
+    </div>
+  </div>
+</div>
+
+<script type="text/javascript">
+  var socketio = io();
+  const messages = document.getElementById("messages");
+  const statusEl = document.getElementById("upload-status");
+  const dropZone = document.getElementById("drop-zone");
+
+  // Auto-scroll to bottom
+  const scrollToBottom = () => {
+    messages.scrollTop = messages.scrollHeight;
+  };
+
+  const createFileMessage = (name, url, type, msg, filename) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'file-message';
+    
+    const author = document.createElement('div');
+    author.className = 'author';
+    author.textContent = `${name}${msg ? ': ' + msg : ''}`;
+    wrap.appendChild(author);
+
+    if (type === 'image') {
+      const img = document.createElement('img');
+      img.src = url;
+      img.alt = filename || 'Image';
+      img.onclick = () => window.open(url, '_blank');
+      wrap.appendChild(img);
+    } else if (type === 'audio') {
+      const aud = document.createElement('audio');
+      aud.controls = true;
+      aud.preload = 'metadata';
+      const src = document.createElement('source');
+      src.src = url;
+      aud.appendChild(src);
+      wrap.appendChild(aud);
+    } else if (type === 'video') {
+      const vid = document.createElement('video');
+      vid.controls = true;
+      vid.preload = 'metadata';
+      vid.style.maxWidth = '400px';
+      vid.style.maxHeight = '300px';
+      const src = document.createElement('source');
+      src.src = url;
+      vid.appendChild(src);
+      wrap.appendChild(vid);
+    } else if (type === 'document') {
+      const a = document.createElement('a');
+      a.href = url;
+      a.textContent = `📄 ${filename || url.split('/').pop()}`;
+      a.target = '_blank';
+      a.download = '';
+      wrap.appendChild(a);
+    }
+    
+    messages.appendChild(wrap);
+    
+    // Add animation
+    setTimeout(() => {
+      wrap.classList.add('show');
+    }, 10);
+    
+    scrollToBottom();
+  };
+
+  const createMessage = (name, msg) => {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'message';
+    
+    const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    
+    messageDiv.innerHTML = `
+      <div class="message-header">
+        <span class="username">${name}</span>
+        <span class="timestamp">${time}</span>
+      </div>
+      <div class="message-content">${msg}</div>
+    `;
+    
+    messages.appendChild(messageDiv);
+    
+    // Add animation
+    setTimeout(() => {
+      messageDiv.classList.add('show');
+    }, 10);
+    
+    scrollToBottom();
+  };
+
+  // Handle incoming messages
+  socketio.on("message", (data) => {
+    if (data.file_url) {
+      createFileMessage(data.name, data.file_url, data.file_type, data.message || '', data.filename);
+    } else {
+      createMessage(data.name, data.message || '');
+    }
+  });
+
+  const sendMessage = () => {
+    const messageInput = document.getElementById("message");
+    const messageText = messageInput.value.trim();
+    
+    if (messageText === "") return;
+    
+    // Add send animation
+    const sendBtn = document.getElementById("send-btn");
+    sendBtn.classList.add('sending');
+    
+    socketio.emit("message", { data: messageText });
+    messageInput.value = "";
+    messageInput.focus();
+    
+    // Remove animation after short delay
+    setTimeout(() => {
+      sendBtn.classList.remove('sending');
+    }, 500);
+  };
+
+  const handleEnterKey = (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      sendMessage();
+    }
+  };
+
+  // File handling functions
+  const handleFileSelect = (files) => {
+    if (files.length > 0) {
+      uploadFile(files[0]);
+    }
+  };
+
+  const uploadFile = async (file) => {
+    // Check file size (16MB limit)
+    if (file.size > 16 * 1024 * 1024) {
+      showStatus('File too large. Maximum size is 16MB.', 'error');
+      return;
+    }
+
+    const messageText = document.getElementById('message').value;
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('message', messageText);
+    formData.append('room', '{{ code }}');
+    formData.append('name', '{{ session.get("name") }}');
+
+    showStatus('Uploading...', 'uploading');
+
+    try {
+      const response = await fetch('/upload', {
+        method: 'POST',
+        body: formData,
+        credentials: 'same-origin'
+      });
+
+      const result = await response.json();
+      
+      if (response.ok) {
+        showStatus(result.message || 'Upload successful!', 'success');
+        document.getElementById('message').value = '';
+      } else {
+        showStatus(result.error || 'Upload failed', 'error');
+      }
+    } catch (error) {
+      showStatus('Network error. Please try again.', 'error');
+      console.error('Upload error:', error);
+    }
+  };
+
+  const showStatus = (message, type) => {
+    statusEl.textContent = message;
+    statusEl.className = `upload-status ${type}`;
+    
+    // Clear status after 5 seconds
+    setTimeout(() => {
+      statusEl.textContent = '';
+      statusEl.className = 'upload-status';
+    }, 5000);
+  };
+
+  // Drag and drop functionality
+  const dragOverHandler = (ev) => {
+    ev.preventDefault();
+    dropZone.classList.add('drag-over');
+  };
+
+  const dragEnterHandler = (ev) => {
+    ev.preventDefault();
+    dropZone.classList.add('drag-over');
+  };
+
+  const dragLeaveHandler = (ev) => {
+    ev.preventDefault();
+    if (!ev.currentTarget.contains(ev.relatedTarget)) {
+      dropZone.classList.remove('drag-over');
+    }
+  };
+
+  const dropHandler = (ev) => {
+    ev.preventDefault();
+    dropZone.classList.remove('drag-over');
+    
+    if (ev.dataTransfer.items) {
+      for (let i = 0; i < ev.dataTransfer.items.length; i++) {
+        if (ev.dataTransfer.items[i].kind === 'file') {
+          const file = ev.dataTransfer.items[i].getAsFile();
+          uploadFile(file);
+          break; // Only handle the first file
+        }
+      }
+    } else {
+      if (ev.dataTransfer.files.length > 0) {
+        uploadFile(ev.dataTransfer.files[0]);
+      }
+    }
+  };
+
+  // Auto-focus on message input when page loads
+  window.addEventListener('load', () => {
+    document.getElementById('message').focus();
+    scrollToBottom();
+  });
+
+  // Add typing indicator effect
+  const messageInput = document.getElementById("message");
+  messageInput.addEventListener('input', () => {
+    const sendBtn = document.getElementById("send-btn");
+    if (messageInput.value.trim()) {
+      sendBtn.classList.add('active');
+    } else {
+      sendBtn.classList.remove('active');
+    }
+  });
+</script>
+
+<!-- Load existing messages from server -->
+{% for msg in messages %}
+  {% if msg.file_url %}
+    <script type="text/javascript">
+      createFileMessage("{{msg.name}}", "{{msg.file_url}}", "{{msg.file_type}}", "{{msg.message}}", "{{msg.filename}}");
+    </script>
+  {% else %}
+    <script type="text/javascript">
+      createMessage("{{msg.name}}", "{{msg.message}}");
+    </script>
+  {% endif %}
+{% endfor %}
+
+{% endblock %}
