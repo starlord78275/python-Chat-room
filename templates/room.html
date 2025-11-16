@@ -2,7 +2,7 @@
 {% block content %}
 <div class="message-box">
   <div class="room-header">
-    <h2>🌟 Chat Room: {{code}} 🌟</h2>
+    <h2> Chat Room: {{code}} </h2>
   </div>
   <div class="messages" id="messages" ondrop="dropHandler(event);" ondragover="dragOverHandler(event);" ondragenter="dragEnterHandler(event);" ondragleave="dragLeaveHandler(event);"></div>
   <div class="input-container">
@@ -16,12 +16,12 @@
         autocomplete="off"
       />
       <button type="button" id="attach-btn" title="Attach File" onclick="document.getElementById('file-input').click()">
-        📎
+        🔗
       </button>
     </div>
     <button type="button" name="send" id="send-btn" onClick="sendMessage()">
       <span>Send</span>
-      <span class="send-icon">🚀</span>
+      <span class="send-icon"> ➤ </span>
     </button>
     <!-- Hidden file input -->
     <input type="file" id="file-input" style="display: none;" onchange="handleFileSelect(this.files)" accept="image/*,audio/*,video/*,application/pdf,.doc,.docx,.txt,.ppt,.pptx,.xls,.xlsx,.zip,.rar" />
